@@ -1,97 +1,125 @@
+// server.js
 const express = require('express');
 const bodyParser = require('body-parser');
-const jwt = require('jsonwebtoken');
 const cors = require('cors');
+const fs = require('fs');
+const jwt = require('jsonwebtoken');
 const path = require('path');
 
 const app = express();
+const PORT = 3000;
 const LICENSE_SECRET = "MORO_POS_SECRET_KEY_2024_SECURE";
+const LICENSES_DB_PATH = './licenses.json';
 
-app.use(bodyParser.json());
 app.use(cors());
+app.use(bodyParser.json());
 app.use('/admin', express.static(path.join(__dirname, 'admin')));
 
-// قاعدة بيانات بسيطة للسيريالات المولدة (في الواقع ستكون قاعدة بيانات حقيقية)
-const licensesDB = {};
+// -------------------- Helpers --------------------
+const readLicenses = () => {
+  if (!fs.existsSync(LICENSES_DB_PATH)) return {};
+  return JSON.parse(fs.readFileSync(LICENSES_DB_PATH, 'utf8'));
+};
 
-// وظيفة لتوليد سيريال جديد عشوائي
-function generateSerial() {
+const writeLicenses = (licenses) => {
+  fs.writeFileSync(LICENSES_DB_PATH, JSON.stringify(licenses, null, 2));
+};
+
+const generateSerial = () => {
   const part = () => Math.floor(1000 + Math.random() * 9000);
   return `MORO-${part()}-${part()}-${part()}`;
-}
+};
 
-// Endpoint لتوليد سيريال جديد (يستخدم من قبل لوحة تحكم الأدمن الخاصة بك)
+// -------------------- Endpoints --------------------
+
+// توليد سيريال جديد
 app.post('/generate-serial', (req, res) => {
-  // قمنا بتوحيد التسمية لتكون customerName
-  const { customerName, hwid } = req.body;
+  const { customerName } = req.body;
+  if (!customerName) return res.status(400).json({ success:false, message:"اسم العميل مطلوب" });
 
-  if (!customerName) {
-    return res.status(400).json({ success: false, message: "اسم العميل مطلوب" });
-  }
-
+  const licenses = readLicenses();
   const serialKey = generateSerial();
-  
-  // تخزين البيانات: الاسم، وهل هو مفعل، ومعرف الجهاز (إن وجد مسبقاً)
-  licensesDB[serialKey] = { 
-    active: true, 
-    hwid: hwid || null, 
-    customerName: customerName.trim() 
+
+  licenses[serialKey] = {
+    active: true,
+    hwid: null,
+    customerName: customerName.trim(),
+    createdAt: new Date().toISOString(),
+    activatedAt: null
   };
 
-  const token = jwt.sign({
-    serialKey,
-    hwid: hwid || null,
-    customerName,
-    activatedAt: new Date().toISOString()
-  }, LICENSE_SECRET);
+  writeLicenses(licenses);
 
-  return res.json({ success: true, serialKey, customerName, token });
+  const token = jwt.sign({ serialKey, customerName }, LICENSE_SECRET);
+
+  res.json({ success:true, serialKey, customerName, token });
 });
 
-// Endpoint لتفعيل السيريال من جهاز العميل
+// تفعيل السيريال على جهاز العميل
 app.post('/activate', (req, res) => {
-  // نستقبل الآن اسم العميل أيضاً للتحقق
   const { serialKey, hwid, customerName } = req.body;
+  if (!serialKey || !hwid || !customerName) return res.status(400).json({ success:false, message:"البيانات غير مكتملة (مطلوب: السيريال، HWID، واسم العميل)" });
 
-  if (!serialKey || !hwid || !customerName) {
-    return res.status(400).json({ success: false, message: "البيانات غير مكتملة (مطلوب: السيريال، معرف الجهاز، واسم العميل)" });
-  }
+  const licenses = readLicenses();
+  const license = licenses[serialKey];
 
-  const license = licensesDB[serialKey];
+  if (!license) return res.status(404).json({ success:false, message:"السيريال غير صحيح" });
 
-  // 1. التحقق من وجود السيريال
-  if (!license) {
-    return res.status(401).json({ success: false, message: "السيريال غير صحيح" });
-  }
-
-  // 2. التحقق من تطابق اسم العميل (لزيادة الأمان ومنع التخمين)
   if (license.customerName.toLowerCase() !== customerName.trim().toLowerCase()) {
-    return res.status(401).json({ success: false, message: "اسم العميل غير مطابق لهذا السيريال" });
+    return res.status(401).json({ success:false, message:"اسم العميل غير مطابق لهذا السيريال" });
   }
 
-  // 3. التحقق من ربط الجهاز (HWID Binding)
-  if (license.hwid !== null && license.hwid !== hwid) {
-    return res.status(403).json({ success: false, message: "هذا السيريال مستخدم بالفعل على جهاز آخر" });
+  if (license.hwid && license.hwid !== hwid) {
+    return res.status(403).json({ success:false, message:"السيريال مستخدم بالفعل على جهاز آخر" });
   }
 
-  // 4. التفعيل لأول مرة (ربط السيريال بالجهاز)
-  if (license.hwid === null) {
+  if (!license.hwid) {
     license.hwid = hwid;
-    console.log(`Activated License ${serialKey} for customer '${customerName}' on Machine ${hwid}`);
+    license.activatedAt = new Date().toISOString();
+    writeLicenses(licenses);
+    console.log(`Activated License ${serialKey} for customer '${customerName}' on HWID ${hwid}`);
   }
 
-  const token = jwt.sign({
-    serialKey,
-    hwid,
-    customerName: license.customerName,
-    activatedAt: new Date().toISOString()
-  }, LICENSE_SECRET);
-
-  return res.json({ success: true, token });
+  const token = jwt.sign({ serialKey, hwid, customerName }, LICENSE_SECRET);
+  res.json({ success:true, serialKey, hwid, customerName, token });
 });
 
-// Start server
-const PORT = 3000;
+// استرجاع كل السيريالات (Dashboard)
+app.get('/licenses', (req, res) => {
+  const licenses = readLicenses();
+  res.json(licenses);
+});
+
+// حذف سيريال
+app.delete('/licenses/:serialKey', (req, res) => {
+  const { serialKey } = req.params;
+  const licenses = readLicenses();
+
+  if (!licenses[serialKey]) return res.status(404).json({ success:false, message:"السيريال غير موجود" });
+
+  delete licenses[serialKey];
+  writeLicenses(licenses);
+  res.json({ success:true, message:"تم حذف السيريال بنجاح" });
+});
+
+// تعديل سيريال (مثلاً تغيير اسم العميل أو إعادة تفعيل)
+app.put('/licenses/:serialKey', (req, res) => {
+  const { serialKey } = req.params;
+  const { customerName, hwid } = req.body;
+
+  const licenses = readLicenses();
+  const license = licenses[serialKey];
+
+  if (!license) return res.status(404).json({ success:false, message:"السيريال غير موجود" });
+
+  if (customerName) license.customerName = customerName.trim();
+  if (hwid) license.hwid = hwid;
+
+  writeLicenses(licenses);
+  res.json({ success:true, message:"تم تعديل السيريال بنجاح", license });
+});
+
+// -------------------- Start Server --------------------
 app.listen(PORT, () => {
-  console.log(`Licensing Server running on port ${PORT}`);
+  console.log(`Licensing Server running on http://localhost:${PORT}`);
 });
