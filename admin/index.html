@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <title>لوحة التحكم - توليد السيريالات</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
-
 <style>
 body {
     font-family: 'Cairo', sans-serif;
@@ -26,38 +25,16 @@ body {
     max-width: 900px;
 }
 h2 { text-align: center; color: #222; margin-bottom: 20px; }
-input, button, select {
-    width: 100%;
-    padding: 10px 15px;
-    margin: 8px 0;
-    font-size: 16px;
-    border-radius: 8px;
-    border: 1px solid #ccc;
-    box-sizing: border-box;
-}
+input, button { width: 100%; padding: 10px; margin: 8px 0; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; }
 input:focus { border-color: #6B73FF; outline: none; box-shadow: 0 0 5px rgba(107, 115, 255, 0.5); }
-button {
-    background: #6B73FF; color: #fff; border: none; cursor: pointer; font-weight: bold; transition: all 0.3s ease;
-}
+button { background: #6B73FF; color: #fff; border: none; cursor: pointer; font-weight: bold; transition: all 0.3s ease; }
 button:hover { background: #000DFF; transform: scale(1.05); }
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
-}
-table th, table td {
-    padding: 10px;
-    border: 1px solid #ccc;
-    text-align: center;
-}
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+table th, table td { padding: 10px; border: 1px solid #ccc; text-align: center; }
 button.small-btn { padding: 5px 10px; font-size: 14px; margin: 2px; }
-#loginDiv { display: none; }
 </style>
 </head>
-
 <body>
-
-<!-- ================== LOGIN ================== -->
 
 <div class="container" id="loginDiv">
     <h2>تسجيل دخول الأدمن</h2>
@@ -65,14 +42,10 @@ button.small-btn { padding: 5px 10px; font-size: 14px; margin: 2px; }
     <button id="loginBtn">دخول</button>
 </div>
 
-<!-- ================== DASHBOARD ================== -->
-
 <div class="container" id="dashboardDiv" style="display:none;">
     <h2>لوحة تحكم السيريالات</h2>
-
     <input type="text" id="clientName" placeholder="اسم العميل">
     <input type="number" id="quantity" placeholder="عدد السيريالات" min="1" value="1">
-
     <button id="generateBtn">توليد السيريالات</button>
     <button id="downloadCSVBtn">تنزيل CSV</button>
 
@@ -90,62 +63,35 @@ button.small-btn { padding: 5px 10px; font-size: 14px; margin: 2px; }
 </div>
 
 <script>
-
 const ADMIN_PASSWORD = "Moro123";
-const API_URL = "https://online-activ-server-production.up.railway.app";
+const API_URL = "https://online-activ-server-production.up.railway.app"; // رابط السيرفر
 
-document.getElementById('loginDiv').style.display = 'block';
+let serialList = [];
 
 document.getElementById('loginBtn').addEventListener('click', () => {
     const pass = document.getElementById('adminPassword').value;
-
     if(pass === ADMIN_PASSWORD){
         document.getElementById('loginDiv').style.display='none';
         document.getElementById('dashboardDiv').style.display='block';
         fetchLicenses();
-    } else {
-        alert("كلمة المرور خاطئة!");
-    }
+    } else alert("كلمة المرور خاطئة!");
 });
 
-let serialList = [];
-
-/*
-    ============================
-    FETCH LICENSES (FIXED)
-    ============================
-*/
 async function fetchLicenses(){
     try{
         const res = await fetch(`${API_URL}/licenses`);
-        const json = await res.json();
-
-        serialList = Object.keys(json).map(key => {
-            const l = json[key];
-            return {
-                serialKey: key,
-                clientName: l.customerName || "",
-                token: l.token || ""
-            };
+        const data = await res.json();
+        serialList = Object.keys(data).map(key => {
+            const l = data[key];
+            return { serialKey:key, clientName:l.customerName||"", token:"" };
         });
-
         refreshTable();
-    }
-    catch(err){
-        alert("فشل تحميل السيريالات: " + err.message);
-    }
+    } catch(err){ alert("فشل تحميل السيريالات: "+err.message); }
 }
 
-/*
-    ============================
-    GENERATE SERIALS
-    ============================
-*/
 document.getElementById('generateBtn').addEventListener('click', async ()=>{
-
     const clientName = document.getElementById('clientName').value.trim();
     const quantity = parseInt(document.getElementById('quantity').value);
-
     if(!clientName) return alert("من فضلك أدخل اسم العميل");
     if(!quantity || quantity<1) return alert("عدد غير صحيح");
 
@@ -154,41 +100,21 @@ document.getElementById('generateBtn').addEventListener('click', async ()=>{
             const res = await fetch(`${API_URL}/generate-serial`, {
                 method:'POST',
                 headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ customerName: clientName })
+                body: JSON.stringify({ customerName })
             });
-
             const data = await res.json();
-
-            if(data.success){
-                serialList.push({
-                    serialKey: data.serialKey,
-                    clientName,
-                    token: data.token
-                });
-            } else {
-                alert("خطأ: "+data.message);
-            }
-
-        }catch(err){
-            alert("حدث خطأ: "+err.message);
-        }
+            if(data.success) serialList.push({ serialKey:data.serialKey, clientName, token:data.token });
+            else alert("خطأ: "+data.message);
+        } catch(err){ alert("حدث خطأ: "+err.message); }
     }
-
     refreshTable();
 });
 
-/*
-    ============================
-    REFRESH TABLE
-    ============================
-*/
 function refreshTable(){
     const tbody = document.querySelector("#serialTable tbody");
     tbody.innerHTML="";
-
     serialList.forEach(item=>{
         const tr = document.createElement('tr');
-
         tr.innerHTML = `
             <td>${item.serialKey}</td>
             <td>${item.clientName}</td>
@@ -196,91 +122,48 @@ function refreshTable(){
             <td>
                 <button class="small-btn" onclick="editSerial('${item.serialKey}')">تعديل</button>
                 <button class="small-btn" onclick="deleteSerial('${item.serialKey}')">حذف</button>
-            </td>
-        `;
-
+            </td>`;
         tbody.appendChild(tr);
     });
 }
 
-/*
-    ============================
-    EDIT LICENSE
-    ============================
-*/
 async function editSerial(serialKey){
     const newName = prompt("ادخل اسم العميل الجديد:");
     if(!newName) return;
-
     try{
         const res = await fetch(`${API_URL}/licenses/${serialKey}`, {
             method:'PUT',
             headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ customerName:newName })
         });
-
         const data = await res.json();
-
-        if(data.success){
-            fetchLicenses();
-        } else {
-            alert(data.message);
-        }
-    }
-    catch(err){
-        alert(err.message);
-    }
+        if(data.success) fetchLicenses();
+        else alert(data.message);
+    } catch(err){ alert(err.message); }
 }
 
-/*
-    ============================
-    DELETE LICENSE
-    ============================
-*/
 async function deleteSerial(serialKey){
     if(!confirm("هل تريد حذف هذا السيريال؟")) return;
-
     try{
         const res = await fetch(`${API_URL}/licenses/${serialKey}`, { method:'DELETE' });
         const data = await res.json();
-
-        if(data.success){
-            fetchLicenses();
-        } else {
-            alert(data.message);
-        }
-    }
-    catch(err){
-        alert(err.message);
-    }
+        if(data.success) fetchLicenses();
+        else alert(data.message);
+    } catch(err){ alert(err.message); }
 }
 
-/*
-    ============================
-    DOWNLOAD CSV
-    ============================
-*/
 document.getElementById('downloadCSVBtn').addEventListener('click', ()=>{
-
-    if(serialList.length===0)
-        return alert("لا يوجد سيريالات لتحميلها");
-
+    if(serialList.length===0) return alert("لا يوجد سيريالات لتحميلها");
     let csv = "data:text/csv;charset=utf-8,Serial Key,Client Name,Token\n";
-
-    serialList.forEach(item=>{
-        csv+=`${item.serialKey},${item.clientName},${item.token}\n`;
-    });
-
+    serialList.forEach(item=>{ csv+=`${item.serialKey},${item.clientName},${item.token}\n`; });
     const encodedUri = encodeURI(csv);
     const link = document.createElement("a");
-    link.href = encodedUri;
-    link.download = "generated_serials.csv";
+    link.setAttribute("href",encodedUri);
+    link.setAttribute("download","generated_serials.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 });
-
 </script>
-
 </body>
 </html>

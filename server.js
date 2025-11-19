@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // للتشغيل على Railway
 const LICENSE_SECRET = "MORO_POS_SECRET_KEY_2024_SECURE";
 const LICENSES_DB_PATH = './licenses.json';
 
@@ -51,40 +51,37 @@ app.post('/generate-serial', (req, res) => {
   writeLicenses(licenses);
 
   const token = jwt.sign({ serialKey, customerName }, LICENSE_SECRET);
-
   res.json({ success:true, serialKey, customerName, token });
 });
 
-// تفعيل السيريال على جهاز العميل
+// تفعيل السيريال
 app.post('/activate', (req, res) => {
   const { serialKey, hwid, customerName } = req.body;
-  if (!serialKey || !hwid || !customerName) return res.status(400).json({ success:false, message:"البيانات غير مكتملة (مطلوب: السيريال، HWID، واسم العميل)" });
+  if (!serialKey || !hwid || !customerName)
+    return res.status(400).json({ success:false, message:"البيانات غير مكتملة" });
 
   const licenses = readLicenses();
   const license = licenses[serialKey];
 
   if (!license) return res.status(404).json({ success:false, message:"السيريال غير صحيح" });
 
-  if (license.customerName.toLowerCase() !== customerName.trim().toLowerCase()) {
-    return res.status(401).json({ success:false, message:"اسم العميل غير مطابق لهذا السيريال" });
-  }
+  if (license.customerName.toLowerCase() !== customerName.trim().toLowerCase())
+    return res.status(401).json({ success:false, message:"اسم العميل غير مطابق" });
 
-  if (license.hwid && license.hwid !== hwid) {
-    return res.status(403).json({ success:false, message:"السيريال مستخدم بالفعل على جهاز آخر" });
-  }
+  if (license.hwid && license.hwid !== hwid)
+    return res.status(403).json({ success:false, message:"السيريال مستخدم على جهاز آخر" });
 
   if (!license.hwid) {
     license.hwid = hwid;
     license.activatedAt = new Date().toISOString();
     writeLicenses(licenses);
-    console.log(`Activated License ${serialKey} for customer '${customerName}' on HWID ${hwid}`);
   }
 
   const token = jwt.sign({ serialKey, hwid, customerName }, LICENSE_SECRET);
   res.json({ success:true, serialKey, hwid, customerName, token });
 });
 
-// استرجاع كل السيريالات (Dashboard)
+// استرجاع كل السيريالات
 app.get('/licenses', (req, res) => {
   const licenses = readLicenses();
   res.json(licenses);
@@ -102,7 +99,7 @@ app.delete('/licenses/:serialKey', (req, res) => {
   res.json({ success:true, message:"تم حذف السيريال بنجاح" });
 });
 
-// تعديل سيريال (مثلاً تغيير اسم العميل أو إعادة تفعيل)
+// تعديل سيريال
 app.put('/licenses/:serialKey', (req, res) => {
   const { serialKey } = req.params;
   const { customerName, hwid } = req.body;
@@ -121,5 +118,5 @@ app.put('/licenses/:serialKey', (req, res) => {
 
 // -------------------- Start Server --------------------
 app.listen(PORT, () => {
-  console.log(`Licensing Server running on http://localhost:${PORT}`);
+  console.log(`Licensing Server running on port ${PORT}`);
 });
