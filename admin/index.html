@@ -63,11 +63,12 @@ button.small-btn { padding: 5px 10px; font-size: 14px; margin: 2px; }
 </div>
 
 <script>
-const ADMIN_PASSWORD = "Moro123";
-const API_URL = "https://online-activ-server-production.up.railway.app"; // رابط السيرفر
+const ADMIN_PASSWORD = "Killbil1@";
+const API_URL = "https://online-activ-server-production.up.railway.app"; // رابط السيرفر على Railway
 
 let serialList = [];
 
+// ================= Login =================
 document.getElementById('loginBtn').addEventListener('click', () => {
     const pass = document.getElementById('adminPassword').value;
     if(pass === ADMIN_PASSWORD){
@@ -77,39 +78,46 @@ document.getElementById('loginBtn').addEventListener('click', () => {
     } else alert("كلمة المرور خاطئة!");
 });
 
+// ================= Fetch licenses =================
 async function fetchLicenses(){
     try{
         const res = await fetch(`${API_URL}/licenses`);
         const data = await res.json();
         serialList = Object.keys(data).map(key => {
             const l = data[key];
-            return { serialKey:key, clientName:l.customerName||"", token:"" };
+            return { serialKey: key, clientName: l.customerName || "", token: l.token || "" };
         });
         refreshTable();
     } catch(err){ alert("فشل تحميل السيريالات: "+err.message); }
 }
 
-document.getElementById('generateBtn').addEventListener('click', async ()=>{
+// ================= Generate Serials =================
+document.getElementById('generateBtn').addEventListener('click', async ()=> {
     const clientName = document.getElementById('clientName').value.trim();
     const quantity = parseInt(document.getElementById('quantity').value);
-    if(!clientName) return alert("من فضلك أدخل اسم العميل");
-    if(!quantity || quantity<1) return alert("عدد غير صحيح");
 
-    for(let i=0;i<quantity;i++){
+    if(!clientName) return alert("من فضلك أدخل اسم العميل");
+    if(!quantity || quantity < 1) return alert("عدد غير صحيح");
+
+    for(let i=0; i<quantity; i++){
         try{
             const res = await fetch(`${API_URL}/generate-serial`, {
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ customerName })
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ customerName: clientName })
             });
             const data = await res.json();
-            if(data.success) serialList.push({ serialKey:data.serialKey, clientName, token:data.token });
-            else alert("خطأ: "+data.message);
-        } catch(err){ alert("حدث خطأ: "+err.message); }
+            if(data.success){
+                serialList.push({ serialKey: data.serialKey, clientName, token: data.token });
+            } else alert("خطأ: "+data.message);
+        } catch(err){
+            alert("حدث خطأ: "+err.message);
+        }
     }
     refreshTable();
 });
 
+// ================= Refresh table =================
 function refreshTable(){
     const tbody = document.querySelector("#serialTable tbody");
     tbody.innerHTML="";
@@ -127,6 +135,7 @@ function refreshTable(){
     });
 }
 
+// ================= Edit / Delete =================
 async function editSerial(serialKey){
     const newName = prompt("ادخل اسم العميل الجديد:");
     if(!newName) return;
@@ -152,6 +161,7 @@ async function deleteSerial(serialKey){
     } catch(err){ alert(err.message); }
 }
 
+// ================= Download CSV =================
 document.getElementById('downloadCSVBtn').addEventListener('click', ()=>{
     if(serialList.length===0) return alert("لا يوجد سيريالات لتحميلها");
     let csv = "data:text/csv;charset=utf-8,Serial Key,Client Name,Token\n";
