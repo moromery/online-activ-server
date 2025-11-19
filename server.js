@@ -5,7 +5,6 @@ const cors = require('cors');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
-const ADMIN_AUTH_ENABLED = true;
 
 const app = express();
 
