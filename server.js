@@ -5,7 +5,6 @@ const cors = require('cors');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
-const ADMIN_PASSWORD = "moro123";
 const ADMIN_AUTH_ENABLED = true;
 
 const app = express();
