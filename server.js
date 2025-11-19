@@ -12,24 +12,40 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const LICENSE_SECRET = "MORO_POS_SECRET_KEY_2024_SECURE";
-const LICENSES_DB_PATH = './licenses.json';
+const LICENSES_DB_PATH = path.join(__dirname, 'licenses.json');
 
 app.use(cors());
 app.use(bodyParser.json());
 
-// ===== لو مجلد admin موجود، استخدمه =====
+// ===== تحميل لوحة التحكم admin إن وجدت =====
 const adminPath = path.join(__dirname, 'admin');
 if (fs.existsSync(adminPath)) {
   app.use('/admin', express.static(adminPath));
 }
 
-// ===== Helpers =====
+// ==================================
+//         Helper Functions
+// ==================================
 const readLicenses = () => {
-  if (!fs.existsSync(LICENSES_DB_PATH)) {
-    fs.writeFileSync(LICENSES_DB_PATH, '{}'); // ينشئ الملف لو مش موجود
+  try {
+    if (!fs.existsSync(LICENSES_DB_PATH)) {
+      fs.writeFileSync(LICENSES_DB_PATH, '{}');
+      return {};
+    }
+
+    const content = fs.readFileSync(LICENSES_DB_PATH, 'utf8').trim();
+
+    if (!content) {
+      fs.writeFileSync(LICENSES_DB_PATH, '{}');
+      return {};
+    }
+
+    return JSON.parse(content);
+
+  } catch (err) {
+    console.error("Error reading licenses.json:", err);
     return {};
   }
-  return JSON.parse(fs.readFileSync(LICENSES_DB_PATH, 'utf8'));
 };
 
 const writeLicenses = (licenses) => {
@@ -41,12 +57,16 @@ const generateSerial = () => {
   return `MORO-${part()}-${part()}-${part()}`;
 };
 
-// ===== Endpoints =====
+// ==================================
+//             API ENDPOINTS
+// ==================================
 
 // توليد سيريال جديد
 app.post('/generate-serial', (req, res) => {
   const { customerName } = req.body;
-  if (!customerName) return res.status(400).json({ success:false, message:"اسم العميل مطلوب" });
+
+  if (!customerName)
+    return res.status(400).json({ success: false, message: "اسم العميل مطلوب" });
 
   const licenses = readLicenses();
   const serialKey = generateSerial();
@@ -63,57 +83,62 @@ app.post('/generate-serial', (req, res) => {
 
   const token = jwt.sign({ serialKey, customerName }, LICENSE_SECRET);
 
-  res.json({ success:true, serialKey, customerName, token });
+  res.json({ success: true, serialKey, customerName, token });
 });
 
-// تفعيل السيريال على جهاز العميل
+
+// تفعيل السيريال
 app.post('/activate', (req, res) => {
   const { serialKey, hwid, customerName } = req.body;
-  if (!serialKey || !hwid || !customerName) return res.status(400).json({ success:false, message:"البيانات غير مكتملة" });
+
+  if (!serialKey || !hwid || !customerName)
+    return res.status(400).json({ success: false, message: "البيانات غير مكتملة" });
 
   const licenses = readLicenses();
   const license = licenses[serialKey];
 
-  if (!license) return res.status(404).json({ success:false, message:"السيريال غير صحيح" });
+  if (!license)
+    return res.status(404).json({ success: false, message: "السيريال غير صحيح" });
 
-  if (license.customerName.toLowerCase() !== customerName.trim().toLowerCase()) {
-    return res.status(401).json({ success:false, message:"اسم العميل غير مطابق للسيريال" });
-  }
+  if (license.customerName.toLowerCase() !== customerName.trim().toLowerCase())
+    return res.status(401).json({ success: false, message: "اسم العميل غير مطابق للسيريال" });
 
-  if (license.hwid && license.hwid !== hwid) {
-    return res.status(403).json({ success:false, message:"السيريال مستخدم على جهاز آخر" });
-  }
+  if (license.hwid && license.hwid !== hwid)
+    return res.status(403).json({ success: false, message: "السيريال مستخدم على جهاز آخر" });
 
   if (!license.hwid) {
     license.hwid = hwid;
     license.activatedAt = new Date().toISOString();
     writeLicenses(licenses);
-    console.log(`Activated License ${serialKey} for customer '${customerName}' on HWID ${hwid}`);
   }
 
   const token = jwt.sign({ serialKey, hwid, customerName }, LICENSE_SECRET);
-  res.json({ success:true, serialKey, hwid, customerName, token });
+
+  res.json({ success: true, serialKey, hwid, customerName, token });
 });
 
-// استرجاع كل السيريالات (Dashboard)
+
+// استرجاع كل السيريالات
 app.get('/licenses', (req, res) => {
-  const licenses = readLicenses();
-  res.json(licenses);
+  res.json(readLicenses());
 });
+
 
 // حذف سيريال
 app.delete('/licenses/:serialKey', (req, res) => {
   const { serialKey } = req.params;
   const licenses = readLicenses();
 
-  if (!licenses[serialKey]) return res.status(404).json({ success:false, message:"السيريال غير موجود" });
+  if (!licenses[serialKey])
+    return res.status(404).json({ success: false, message: "السيريال غير موجود" });
 
   delete licenses[serialKey];
   writeLicenses(licenses);
-  res.json({ success:true, message:"تم حذف السيريال بنجاح" });
+  res.json({ success: true, message: "تم حذف السيريال بنجاح" });
 });
 
-// تعديل سيريال (مثلاً تغيير اسم العميل)
+
+// تعديل سيريال
 app.put('/licenses/:serialKey', (req, res) => {
   const { serialKey } = req.params;
   const { customerName, hwid } = req.body;
@@ -121,16 +146,19 @@ app.put('/licenses/:serialKey', (req, res) => {
   const licenses = readLicenses();
   const license = licenses[serialKey];
 
-  if (!license) return res.status(404).json({ success:false, message:"السيريال غير موجود" });
+  if (!license)
+    return res.status(404).json({ success: false, message: "السيريال غير موجود" });
 
   if (customerName) license.customerName = customerName.trim();
   if (hwid) license.hwid = hwid;
 
   writeLicenses(licenses);
-  res.json({ success:true, message:"تم تعديل السيريال بنجاح", license });
+
+  res.json({ success: true, message: "تم تعديل السيريال بنجاح", license });
 });
 
-// ===== Start Server =====
+
+// ===== تشغيل السيرفر =====
 app.listen(PORT, () => {
   console.log(`Licensing Server running on port ${PORT}`);
 });

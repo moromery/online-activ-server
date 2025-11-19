@@ -54,7 +54,7 @@ button.small-btn { padding: 5px 10px; font-size: 14px; margin: 2px; }
             <tr>
                 <th>Serial Key</th>
                 <th>اسم العميل</th>
-                <th>Token</th>
+                <th>HWID</th>
                 <th>خيارات</th>
             </tr>
         </thead>
@@ -63,12 +63,27 @@ button.small-btn { padding: 5px 10px; font-size: 14px; margin: 2px; }
 </div>
 
 <script>
-const ADMIN_PASSWORD = "Killbil1@";
-const API_URL = "https://online-activ-server-production.up.railway.app"; // رابط السيرفر على Railway
+// ===========================================================
+//      إعدادات تعمل على المحلي + Railway تلقائياً
+// ===========================================================
 
+// لو الصفحة شغالة من Railway — خليه يستخدم دومين Railway تلقائياً
+// لو شغالة محلياً — هيستخدم localhost 3000 تلقائياً
+let API_URL = "";
+
+if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+    API_URL = "http://localhost:3000";
+} else {
+    API_URL = "https://online-activ-server-production.up.railway.app";
+}
+
+console.log("API_URL:", API_URL);
+
+// ===========================================================
+
+const ADMIN_PASSWORD = "Moro123";
 let serialList = [];
 
-// ================= Login =================
 document.getElementById('loginBtn').addEventListener('click', () => {
     const pass = document.getElementById('adminPassword').value;
     if(pass === ADMIN_PASSWORD){
@@ -78,20 +93,29 @@ document.getElementById('loginBtn').addEventListener('click', () => {
     } else alert("كلمة المرور خاطئة!");
 });
 
-// ================= Fetch licenses =================
+// ================ تحميل السيريالات ==================
 async function fetchLicenses(){
     try{
         const res = await fetch(`${API_URL}/licenses`);
         const data = await res.json();
+
         serialList = Object.keys(data).map(key => {
-            const l = data[key];
-            return { serialKey: key, clientName: l.customerName || "", token: l.token || "" };
+            const x = data[key];
+            return {
+                serialKey: key,
+                clientName: x.customerName || "",
+                hwid: x.hwid || ""
+            };
         });
+
         refreshTable();
-    } catch(err){ alert("فشل تحميل السيريالات: "+err.message); }
+
+    } catch(err){
+        alert("فشل تحميل السيريالات: " + err.message);
+    }
 }
 
-// ================= Generate Serials =================
+// ================ توليد السيريالات ==================
 document.getElementById('generateBtn').addEventListener('click', async ()=> {
     const clientName = document.getElementById('clientName').value.trim();
     const quantity = parseInt(document.getElementById('quantity').value);
@@ -106,27 +130,32 @@ document.getElementById('generateBtn').addEventListener('click', async ()=> {
                 headers: {'Content-Type':'application/json'},
                 body: JSON.stringify({ customerName: clientName })
             });
+
             const data = await res.json();
             if(data.success){
-                serialList.push({ serialKey: data.serialKey, clientName, token: data.token });
-            } else alert("خطأ: "+data.message);
+                console.log("Serial generated:", data.serialKey);
+            } else {
+                alert("خطأ: "+data.message);
+            }
         } catch(err){
             alert("حدث خطأ: "+err.message);
         }
     }
-    refreshTable();
+
+    fetchLicenses();
 });
 
-// ================= Refresh table =================
+// ============== عرض السيريالات في الجدول ==============
 function refreshTable(){
     const tbody = document.querySelector("#serialTable tbody");
     tbody.innerHTML="";
+
     serialList.forEach(item=>{
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${item.serialKey}</td>
             <td>${item.clientName}</td>
-            <td>${item.token}</td>
+            <td>${item.hwid}</td>
             <td>
                 <button class="small-btn" onclick="editSerial('${item.serialKey}')">تعديل</button>
                 <button class="small-btn" onclick="deleteSerial('${item.serialKey}')">حذف</button>
@@ -135,41 +164,273 @@ function refreshTable(){
     });
 }
 
-// ================= Edit / Delete =================
+// ================ تعديل اسم العميل =================
 async function editSerial(serialKey){
     const newName = prompt("ادخل اسم العميل الجديد:");
     if(!newName) return;
+
     try{
         const res = await fetch(`${API_URL}/licenses/${serialKey}`, {
             method:'PUT',
             headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ customerName:newName })
         });
+
         const data = await res.json();
         if(data.success) fetchLicenses();
         else alert(data.message);
+
     } catch(err){ alert(err.message); }
 }
 
+// ================ حذف سيريال =================
 async function deleteSerial(serialKey){
     if(!confirm("هل تريد حذف هذا السيريال؟")) return;
+
     try{
-        const res = await fetch(`${API_URL}/licenses/${serialKey}`, { method:'DELETE' });
+        const res = await fetch(`${API_URL}/licenses/${serialKey}`, {
+            method:'DELETE'
+        });
+
         const data = await res.json();
         if(data.success) fetchLicenses();
         else alert(data.message);
+
     } catch(err){ alert(err.message); }
 }
 
-// ================= Download CSV =================
+// ================ تنزيل CSV =================
 document.getElementById('downloadCSVBtn').addEventListener('click', ()=>{
     if(serialList.length===0) return alert("لا يوجد سيريالات لتحميلها");
-    let csv = "data:text/csv;charset=utf-8,Serial Key,Client Name,Token\n";
-    serialList.forEach(item=>{ csv+=`${item.serialKey},${item.clientName},${item.token}\n`; });
-    const encodedUri = encodeURI(csv);
+
+    let csv = "data:text/csv;charset=utf-8,Serial Key,Client Name,HWID\n";
+    serialList.forEach(item=>{
+        csv += `${item.serialKey},${item.clientName},${item.hwid}\n`;
+    });
+
     const link = document.createElement("a");
-    link.setAttribute("href",encodedUri);
-    link.setAttribute("download","generated_serials.csv");
+    link.href = encodeURI(csv);
+    link.download = "serials.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+});
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>لوحة التحكم - توليد السيريالات</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+<style>
+body {
+    font-family: 'Cairo', sans-serif;
+    background: linear-gradient(135deg, #6B73FF 0%, #000DFF 100%);
+    color: #333;
+    padding: 0;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.container {
+    background: #fff;
+    padding: 30px 40px;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    width: 100%;
+    max-width: 900px;
+}
+h2 { text-align: center; color: #222; margin-bottom: 20px; }
+input, button { width: 100%; padding: 10px; margin: 8px 0; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; }
+input:focus { border-color: #6B73FF; outline: none; box-shadow: 0 0 5px rgba(107, 115, 255, 0.5); }
+button { background: #6B73FF; color: #fff; border: none; cursor: pointer; font-weight: bold; transition: all 0.3s ease; }
+button:hover { background: #000DFF; transform: scale(1.05); }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+table th, table td { padding: 10px; border: 1px solid #ccc; text-align: center; }
+button.small-btn { padding: 5px 10px; font-size: 14px; margin: 2px; }
+</style>
+</head>
+<body>
+
+<div class="container" id="loginDiv">
+    <h2>تسجيل دخول الأدمن</h2>
+    <input type="password" id="adminPassword" placeholder="كلمة المرور">
+    <button id="loginBtn">دخول</button>
+</div>
+
+<div class="container" id="dashboardDiv" style="display:none;">
+    <h2>لوحة تحكم السيريالات</h2>
+    <input type="text" id="clientName" placeholder="اسم العميل">
+    <input type="number" id="quantity" placeholder="عدد السيريالات" min="1" value="1">
+    <button id="generateBtn">توليد السيريالات</button>
+    <button id="downloadCSVBtn">تنزيل CSV</button>
+
+    <table id="serialTable">
+        <thead>
+            <tr>
+                <th>Serial Key</th>
+                <th>اسم العميل</th>
+                <th>HWID</th>
+                <th>خيارات</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+// ===========================================================
+//      إعدادات تعمل على المحلي + Railway تلقائياً
+// ===========================================================
+
+// لو الصفحة شغالة من Railway — خليه يستخدم دومين Railway تلقائياً
+// لو شغالة محلياً — هيستخدم localhost 3000 تلقائياً
+let API_URL = "";
+
+if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+    API_URL = "http://localhost:3000";
+} else {
+    API_URL = "https://online-activ-server-production.up.railway.app";
+}
+
+console.log("API_URL:", API_URL);
+
+// ===========================================================
+
+const ADMIN_PASSWORD = "Moro123";
+let serialList = [];
+
+document.getElementById('loginBtn').addEventListener('click', () => {
+    const pass = document.getElementById('adminPassword').value;
+    if(pass === ADMIN_PASSWORD){
+        document.getElementById('loginDiv').style.display='none';
+        document.getElementById('dashboardDiv').style.display='block';
+        fetchLicenses();
+    } else alert("كلمة المرور خاطئة!");
+});
+
+// ================ تحميل السيريالات ==================
+async function fetchLicenses(){
+    try{
+        const res = await fetch(`${API_URL}/licenses`);
+        const data = await res.json();
+
+        serialList = Object.keys(data).map(key => {
+            const x = data[key];
+            return {
+                serialKey: key,
+                clientName: x.customerName || "",
+                hwid: x.hwid || ""
+            };
+        });
+
+        refreshTable();
+
+    } catch(err){
+        alert("فشل تحميل السيريالات: " + err.message);
+    }
+}
+
+// ================ توليد السيريالات ==================
+document.getElementById('generateBtn').addEventListener('click', async ()=> {
+    const clientName = document.getElementById('clientName').value.trim();
+    const quantity = parseInt(document.getElementById('quantity').value);
+
+    if(!clientName) return alert("من فضلك أدخل اسم العميل");
+    if(!quantity || quantity < 1) return alert("عدد غير صحيح");
+
+    for(let i=0; i<quantity; i++){
+        try{
+            const res = await fetch(`${API_URL}/generate-serial`, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ customerName: clientName })
+            });
+
+            const data = await res.json();
+            if(data.success){
+                console.log("Serial generated:", data.serialKey);
+            } else {
+                alert("خطأ: "+data.message);
+            }
+        } catch(err){
+            alert("حدث خطأ: "+err.message);
+        }
+    }
+
+    fetchLicenses();
+});
+
+// ============== عرض السيريالات في الجدول ==============
+function refreshTable(){
+    const tbody = document.querySelector("#serialTable tbody");
+    tbody.innerHTML="";
+
+    serialList.forEach(item=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${item.serialKey}</td>
+            <td>${item.clientName}</td>
+            <td>${item.hwid}</td>
+            <td>
+                <button class="small-btn" onclick="editSerial('${item.serialKey}')">تعديل</button>
+                <button class="small-btn" onclick="deleteSerial('${item.serialKey}')">حذف</button>
+            </td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+// ================ تعديل اسم العميل =================
+async function editSerial(serialKey){
+    const newName = prompt("ادخل اسم العميل الجديد:");
+    if(!newName) return;
+
+    try{
+        const res = await fetch(`${API_URL}/licenses/${serialKey}`, {
+            method:'PUT',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ customerName:newName })
+        });
+
+        const data = await res.json();
+        if(data.success) fetchLicenses();
+        else alert(data.message);
+
+    } catch(err){ alert(err.message); }
+}
+
+// ================ حذف سيريال =================
+async function deleteSerial(serialKey){
+    if(!confirm("هل تريد حذف هذا السيريال؟")) return;
+
+    try{
+        const res = await fetch(`${API_URL}/licenses/${serialKey}`, {
+            method:'DELETE'
+        });
+
+        const data = await res.json();
+        if(data.success) fetchLicenses();
+        else alert(data.message);
+
+    } catch(err){ alert(err.message); }
+}
+
+// ================ تنزيل CSV =================
+document.getElementById('downloadCSVBtn').addEventListener('click', ()=>{
+    if(serialList.length===0) return alert("لا يوجد سيريالات لتحميلها");
+
+    let csv = "data:text/csv;charset=utf-8,Serial Key,Client Name,HWID\n";
+    serialList.forEach(item=>{
+        csv += `${item.serialKey},${item.clientName},${item.hwid}\n`;
+    });
+
+    const link = document.createElement("a");
+    link.href = encodeURI(csv);
+    link.download = "serials.csv";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
