@@ -1,1 +1,23 @@
-{}
+{
+  "MORO-5530-2178-5101": {
+    "active": true,
+    "hwid": null,
+    "customerName": "مصطفى",
+    "createdAt": "2025-11-19T16:47:24.384Z",
+    "activatedAt": null
+  },
+  "MORO-9165-7912-1911": {
+    "active": true,
+    "hwid": null,
+    "customerName": "مصطفى",
+    "createdAt": "2025-11-19T16:47:24.406Z",
+    "activatedAt": null
+  },
+  "MORO-7699-7761-4430": {
+    "active": true,
+    "hwid": null,
+    "customerName": "امانى",
+    "createdAt": "2025-11-19T16:47:52.848Z",
+    "activatedAt": null
+  }
+}
