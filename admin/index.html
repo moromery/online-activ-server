@@ -2,133 +2,181 @@
 <html lang="ar">
 <head>
 <meta charset="UTF-8">
-<title>توليد السيريالات وحفظ CSV</title>
+<title>لوحة التحكم - توليد السيريالات</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
 <style>
-  body {
+body {
     font-family: 'Cairo', sans-serif;
     background: linear-gradient(135deg, #6B73FF 0%, #000DFF 100%);
     color: #333;
     padding: 0;
     margin: 0;
+    min-height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
-  }
-  .container {
+}
+.container {
     background: #fff;
     padding: 30px 40px;
     border-radius: 15px;
     box-shadow: 0 10px 25px rgba(0,0,0,0.2);
     width: 100%;
-    max-width: 600px;
-  }
-  h2 {
-    text-align: center;
-    color: #222;
-    margin-bottom: 25px;
-  }
-  input, button {
+    max-width: 800px;
+}
+h2 { text-align: center; color: #222; margin-bottom: 20px; }
+input, button, select {
     width: 100%;
-    padding: 12px 15px;
-    margin: 10px 0;
+    padding: 10px 15px;
+    margin: 8px 0;
     font-size: 16px;
     border-radius: 8px;
     border: 1px solid #ccc;
     box-sizing: border-box;
-  }
-  input:focus {
-    border-color: #6B73FF;
-    outline: none;
-    box-shadow: 0 0 5px rgba(107, 115, 255, 0.5);
-  }
-  button {
-    background: #6B73FF;
-    color: #fff;
-    border: none;
-    cursor: pointer;
-    font-weight: bold;
-    transition: all 0.3s ease;
-  }
-  button:hover {
-    background: #000DFF;
-    transform: scale(1.05);
-  }
-  pre {
-    background: #f4f4f4;
-    padding: 15px;
-    border-radius: 10px;
-    max-height: 250px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
+}
+input:focus { border-color: #6B73FF; outline: none; box-shadow: 0 0 5px rgba(107, 115, 255, 0.5); }
+button {
+    background: #6B73FF; color: #fff; border: none; cursor: pointer; font-weight: bold; transition: all 0.3s ease;
+}
+button:hover { background: #000DFF; transform: scale(1.05); }
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+table th, table td {
+    padding: 10px;
+    border: 1px solid #ccc;
+    text-align: center;
+}
+button.small-btn { padding: 5px 10px; font-size: 14px; margin: 2px; }
+#loginDiv { display: none; }
 </style>
 </head>
 <body>
-  <div class="container">
-    <h2>توليد السيريالات وحفظ CSV</h2>
+<div class="container" id="loginDiv">
+    <h2>تسجيل دخول الأدمن</h2>
+    <input type="password" id="adminPassword" placeholder="كلمة المرور">
+    <button id="loginBtn">دخول</button>
+</div>
+
+<div class="container" id="dashboardDiv" style="display:none;">
+    <h2>لوحة تحكم السيريالات</h2>
     <input type="text" id="clientName" placeholder="اسم العميل">
     <input type="number" id="quantity" placeholder="عدد السيريالات" min="1" value="1">
     <button id="generateBtn">توليد السيريالات</button>
-    <h3>النتيجة:</h3>
-    <pre id="result">هنا سيظهر السيريال والـ Token</pre>
-  </div>
+    <button id="downloadCSVBtn">تنزيل CSV</button>
+
+    <table id="serialTable">
+        <thead>
+            <tr>
+                <th>Serial Key</th>
+                <th>اسم العميل</th>
+                <th>Token</th>
+                <th>خيارات</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
 
 <script>
+// ================= CONFIG ==================
+const ADMIN_PASSWORD = "Moro123"; // غيّرها لو عايز
+const API_URL = "https://online-activ-server-production.up.railway.app";
+
+// ================= VARIABLES ==================
 const serialList = [];
 
-document.getElementById('generateBtn').addEventListener('click', async () => {
-  const clientName = document.getElementById('clientName').value.trim();
-  const quantity = parseInt(document.getElementById('quantity').value);
-
-  if (!clientName) return alert("من فضلك أدخل اسم العميل");
-  if (!quantity || quantity < 1) return alert("من فضلك أدخل عدد صحيح أكبر من صفر");
-
-  for (let i = 0; i < quantity; i++) {
-    try {
-      const response = await fetch('http://localhost:3000/generate-serial', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerName: clientName }) // مهم: customerName للسيرفر
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        serialList.push({ serialKey: data.serialKey, clientName, token: data.token });
-        document.getElementById('result').textContent += 
-          `Serial Key: ${data.serialKey}\nClient Name: ${clientName}\nToken: ${data.token}\n-----------------------\n`;
-      } else {
-        alert(`خطأ: ${data.message}`);
-      }
-
-    } catch(err) {
-      alert("حدث خطأ: " + err.message);
+// ================= LOGIN ==================
+document.getElementById('loginDiv').style.display = 'block';
+document.getElementById('loginBtn').addEventListener('click', () => {
+    const pass = document.getElementById('adminPassword').value;
+    if(pass === ADMIN_PASSWORD) {
+        document.getElementById('loginDiv').style.display = 'none';
+        document.getElementById('dashboardDiv').style.display = 'block';
+        refreshTable();
+    } else {
+        alert("كلمة المرور خاطئة!");
     }
-  }
-
-  downloadCSV();
 });
 
-function downloadCSV() {
-  if (serialList.length === 0) return;
+// ================= GENERATE SERIALS ==================
+document.getElementById('generateBtn').addEventListener('click', async () => {
+    const clientName = document.getElementById('clientName').value.trim();
+    const quantity = parseInt(document.getElementById('quantity').value);
+    if(!clientName) return alert("من فضلك أدخل اسم العميل");
+    if(!quantity || quantity<1) return alert("من فضلك أدخل عدد صحيح أكبر من صفر");
 
-  let csvContent = "data:text/csv;charset=utf-8,";
-  csvContent += "Serial Key,Client Name,Token\n";
-  serialList.forEach(item => {
-    csvContent += `${item.serialKey},${item.clientName},${item.token}\n`;
-  });
+    for(let i=0;i<quantity;i++){
+        try{
+            const res = await fetch(`${API_URL}/generate-serial`, {
+                method: 'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ customerName: clientName })
+            });
+            const data = await res.json();
+            if(data.success){
+                serialList.push({ serialKey: data.serialKey, clientName, token: data.token });
+            } else {
+                alert("خطأ: "+data.message);
+            }
+        } catch(err){
+            alert("حدث خطأ: "+err.message);
+        }
+    }
+    refreshTable();
+});
 
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
-  link.setAttribute("download", "generated_serials.csv");
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+// ================= REFRESH TABLE ==================
+function refreshTable(){
+    const tbody = document.querySelector("#serialTable tbody");
+    tbody.innerHTML = "";
+    serialList.forEach((item,index)=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${item.serialKey}</td>
+            <td>${item.clientName}</td>
+            <td>${item.token}</td>
+            <td>
+                <button class="small-btn" onclick="editSerial(${index})">تعديل</button>
+                <button class="small-btn" onclick="deleteSerial(${index})">حذف</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
+
+// ================= EDIT / DELETE ==================
+function editSerial(idx){
+    const newName = prompt("ادخل اسم العميل الجديد:", serialList[idx].clientName);
+    if(newName) {
+        serialList[idx].clientName = newName;
+        refreshTable();
+    }
+}
+function deleteSerial(idx){
+    if(confirm("هل تريد حذف هذا السيريال؟")){
+        serialList.splice(idx,1);
+        refreshTable();
+    }
+}
+
+// ================= DOWNLOAD CSV ==================
+document.getElementById('downloadCSVBtn').addEventListener('click',()=>{
+    if(serialList.length===0) return alert("لا يوجد سيريالات لتحميلها");
+    let csv="data:text/csv;charset=utf-8,Serial Key,Client Name,Token\n";
+    serialList.forEach(item=>{
+        csv+=`${item.serialKey},${item.clientName},${item.token}\n`;
+    });
+    const encodedUri = encodeURI(csv);
+    const link = document.createElement("a");
+    link.setAttribute("href",encodedUri);
+    link.setAttribute("download","generated_serials.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+});
 </script>
 </body>
 </html>
